@@ -12,6 +12,7 @@ Open `index.html` in a browser (Chrome, Edge, Firefox or Safari) and press **Sta
 - **Per speaker**: propagation delay (distance / 343 m/s), 1/r level, a simple directivity rule (off-axis level and treble loss), crossover bands, and binaural rendering from its direction relative to your head.
 - **Calibration**: time alignment (delay nearer speakers so all wavefronts arrive together) and per-channel level trim, aimed at a chosen point: the cinema reference seat, a car seat, the cabin centre, or "my seat" (follows you).
 - **Panned source**: a sound panned across channels with 2D VBAP around the mix reference point, or solo any single speaker.
+- **A/B comparison**: pick two rendering systems (VBAP calibrated or uncalibrated, snap to nearest speaker, first-order Ambisonics, a WFS-style virtual source, plain stereo headphones without HRTF) and flip between them instantly with the B key or every 4 seconds. A dense ring layout (a speaker every 1.5 m) lets you compare methods with many speakers.
 - **Map overlay**: a predicted image-error, arrival-spread or loudness map. The image-error model is an energy vector with precedence-effect weighting (later arrivals beyond ~1 ms are discounted). It is a teaching model, not a perceptual simulation.
 - **Fire wavefronts**: a slowed-down animation of each speaker's wavefront, with the click played in real time.
 

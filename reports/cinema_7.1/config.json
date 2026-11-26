@@ -1,0 +1,9 @@
+{
+  "room": "cinema",
+  "layout": "7.1",
+  "cal_target": "Reference seat",
+  "align": true,
+  "level": true,
+  "reflections": true,
+  "hrtf": "MIT KEMAR (generic dummy head)"
+}

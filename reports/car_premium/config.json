@@ -1,0 +1,9 @@
+{
+  "room": "car",
+  "layout": "premium",
+  "cal_target": "Front left",
+  "align": true,
+  "level": true,
+  "reflections": true,
+  "hrtf": "MIT KEMAR (generic dummy head)"
+}

@@ -1,0 +1,6 @@
+renderer,Sweet-spot seats (%),Mean lateral error (deg),90th pct lateral error (deg),Mean arrival spread (ms),"Level spread across seats (dB, std)",Colouration (dB),Envelopment (1-IACC)
+WFS,1.79,19.81,48.13,0.21,2.44,3.17,0.84
+VBAP,1.79,23.18,58.84,1.01,2.18,2.38,0.76
+Snap,0.6,21.05,48.47,0.11,2.3,2.36,0.81
+DistanceWeighted,0.0,58.96,101.95,3.26,1.21,2.44,0.65
+FirstOrderAmbisonics,0.0,59.17,102.96,2.89,1.31,2.46,0.74

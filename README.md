@@ -1,21 +1,89 @@
 # Sweet Spot Simulation
 
-A browser-based listening lab for spatial audio in cinemas and car cabins. Pick a room, a speaker layout and a seat; every speaker's sound reaches your seat with its real travel time, level and angle, then is rendered binaurally (HRTF) for **headphones**.
+A listening lab for spatial audio in cinemas and car cabins. Pick a room, a speaker layout, a seat and a scene (characters talking, a forest, a storm with a jet flyover, a truck overtaking in the rain), and hear on **headphones** what that seat really gets. Compare two rendering algorithms A/B, write your own algorithm in Python, and run evals that map where each one works.
 
-## Run it
+There are two versions:
 
-Open `index.html` in a browser (Chrome, Edge, Firefox or Safari) and press **Start sound**. No build step and no dependencies; it uses the Web Audio API only. Use headphones.
+| | Python lab (`app/`, `sweetspot/`) | Browser lab (`index.html`) |
+| --- | --- | --- |
+| Audio | Offline render: direct sound, wall reflections, reverb, HRTF convolution | Real-time Web Audio, direct sound only |
+| Content | Dialogue, nature and cinema-effect scenes, or your own WAV | Test signals |
+| Algorithms | Plug-in Python classes, including your own | Fixed set |
+| Evals | Per-seat metrics, maps, HTML report | Predicted map only |
 
-## What it models
+## Python lab
 
-- **Rooms**: an 18 × 28 m cinema (~300 seats, stadium rows) with stereo, 5.1 and 7.1 layouts (surround arrays on side and rear walls), and a car cabin with a basic four-door layout or a premium layout (A-pillar tweeters, door woofers, centre, rear doors, sub).
-- **Per speaker**: propagation delay (distance / 343 m/s), 1/r level, a simple directivity rule (off-axis level and treble loss), crossover bands, and binaural rendering from its direction relative to your head.
-- **Calibration**: time alignment (delay nearer speakers so all wavefronts arrive together) and per-channel level trim, aimed at a chosen point: the cinema reference seat, a car seat, the cabin centre, or "my seat" (follows you).
-- **Panned source**: a sound panned across channels with 2D VBAP around the mix reference point, or solo any single speaker.
-- **A/B comparison**: pick two rendering systems (VBAP calibrated or uncalibrated, snap to nearest speaker, first-order Ambisonics, a WFS-style virtual source, plain stereo headphones without HRTF) and flip between them instantly with the B key or every 4 seconds. A dense ring layout (a speaker every 1.5 m) lets you compare methods with many speakers.
-- **Map overlay**: a predicted image-error, arrival-spread or loudness map. The image-error model is an energy vector with precedence-effect weighting (later arrivals beyond ~1 ms are discounted). It is a teaching model, not a perceptual simulation.
-- **Fire wavefronts**: a slowed-down animation of each speaker's wavefront, with the click played in real time.
+```bash
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+streamlit run app/streamlit_app.py
+```
 
-## Simplifications
+The app opens in your browser with four tabs:
 
-Generic browser HRTF (not personalised); direct sound only plus a generic diffuse reverb (no modelled reflections); typical, guessed room and speaker positions; delay and level calibration only (no EQ); one 2.5 kHz crossover; bass under 100 Hz also sent to the sub.
+- **Listen and compare**: click a seat on the map, choose a scene and two algorithms, and press Render. Both versions play loudness-matched so only the spatial difference remains. The table shows every speaker's distance, added delay, arrival time, level and off-axis angle at your seat.
+- **Sweet-spot evals**: runs every algorithm at every seat on a grid and shows the summary table and maps. Download the HTML report or the CSV.
+- **Write your algorithm**: the template and how to plug it in.
+- **How it works**: the signal path and assumptions.
+
+Use the sidebar to change the calibration point, time alignment, level trim, reflections, head turn, binaural or plain stereo, and to load your own HRTF (.sofa).
+
+### Write your own rendering algorithm
+
+Copy `user_renderers/my_renderer.py`, rename the class and change `drive()`:
+
+```python
+@register
+class MyPanner(Renderer):
+    name = "My panner"
+    def drive(self, source_pos, ctx):          # where the sound should be -> what each speaker plays
+        gains = ...                             # one gain per loudspeaker (ctx.speakers)
+        delays = np.zeros(ctx.n)                # optional extra delay per loudspeaker, seconds
+        return Drive(gains, delays)
+```
+
+The engine handles calibration, room acoustics, the subwoofer and the binaural render. Reference implementations to read are in `sweetspot/renderers/reference.py`: VBAP (3-D, triangulated), snap to nearest speaker, first-order Ambisonics, and wave field synthesis.
+
+### Evals
+
+```bash
+python -m sweetspot.evals.run --room cinema --layout 7.1 --out reports/cinema_7.1
+python -m sweetspot.evals.run --room car --renderers MyPanner VBAP --cal-target "Front left"
+pytest
+```
+
+Each seat and probe source gets these measures, computed from the binaural impulse response at the ears (details in `sweetspot/evals/metrics.py`):
+
+- **Lateral localisation error**: perceived left-right angle (from ITD and ILD of the first 1.5 ms) against the intended one.
+- **Arrival spread**: time from the first to the last speaker arrival.
+- **Loudness relative to the reference seat**.
+- **Colouration**: how much the spectrum deviates from a real source, which shows comb filtering.
+- **Envelopment**: 1 - IACC of a diffuse bed.
+
+Summary: sweet-spot area (share of seats with mean error ≤ 10°), mean and 90th-percentile error. Sample reports are in `reports/`.
+
+### Package layout
+
+```
+sweetspot/geometry.py      coordinates, Speaker, Room, Listener
+sweetspot/rooms.py         cinema and car definitions, speaker layouts, seats
+sweetspot/acoustics.py     image-source reflections, directivity, BRIRs, calibration
+sweetspot/hrtf.py          MIT KEMAR HRTF (built in) or your SOFA file
+sweetspot/engine.py        renders a scene through a speaker system at one seat
+sweetspot/scenes.py        dialogue, nature and effects scenes
+sweetspot/synth.py         procedural sounds (rain, wind, birds, jet, thunder, explosion, ...)
+sweetspot/renderers/       Renderer interface + reference algorithms
+sweetspot/evals/           metrics, batch runner, HTML report
+user_renderers/            your algorithms (loaded automatically)
+app/streamlit_app.py       the UI
+```
+
+### Credits and assumptions
+
+- HRTF: MIT KEMAR dummy-head measurements, Bill Gardner and Keith Martin, MIT Media Lab (1994), used with acknowledgement as its authors ask.
+- Voices are synthesised with espeak-ng (`tools/make_assets.py`). All other sounds are generated in code, so the repository holds no third-party recordings.
+- The rooms are shoeboxes with typical, guessed dimensions and speaker positions. Speaker directivity uses a simple rule, not measured data. Calibration covers delay and level only, with no EQ.
+
+## Browser lab
+
+Open `index.html` in a browser and press **Start sound**. It needs no install and no dependencies.

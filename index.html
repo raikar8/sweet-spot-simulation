@@ -100,6 +100,12 @@ td:first-child,th:first-child,td:nth-child(2),th:nth-child(2){text-align:left}
 td{font-family:var(--f-mono)}
 tr.muted td{opacity:.45}
 tr.first td{font-weight:600}
+.cmp{background:var(--soft);border-radius:10px;padding:10px 12px}
+.abrow{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:center}
+.abrow b{font-family:var(--f-display);font-size:15px}
+#abSeg button{font-weight:600}
+.sysnote{font-size:12.5px;color:var(--ink);margin:0;line-height:1.45}
+.exp h4{margin:6px 0 0;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
 .exp{display:flex;flex-direction:column;gap:10px}
 .exp article{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
 .exp h3{margin:0;font-size:14px;font-weight:600}
@@ -135,6 +141,17 @@ ul.notes b{color:var(--ink);font-weight:600}
   </section>
 
   <aside class="panel" aria-label="Controls">
+    <div class="grp cmp">
+      <span class="lbl">Compare two systems</span>
+      <div class="abrow"><b>A</b><select id="sysA" aria-label="System A"></select></div>
+      <div class="abrow"><b>B</b><select id="sysB" aria-label="System B"></select></div>
+      <div class="row">
+        <div class="seg" id="abSeg" style="flex:1"><button type="button" data-v="A" aria-pressed="true">Hear A</button><button type="button" data-v="B" aria-pressed="false">Hear B</button></div>
+        <label class="tog" style="align-items:center"><input type="checkbox" id="abAuto"><span>Switch every 4 s</span></label>
+      </div>
+      <p class="sysnote" id="sysNote"></p>
+      <span class="hp">Press B on the keyboard to flip. Seat, sound and direction stay the same.</span>
+    </div>
     <div class="grp">
       <span class="lbl">Room</span>
       <div class="seg" id="roomSeg">
@@ -199,8 +216,8 @@ ul.notes b{color:var(--ink);font-weight:600}
 <section class="wrap lower">
   <div class="card">
     <h2>What reaches your seat</h2>
-    <p class="explain" id="tableNote">Each row is one speaker, sorted by when its sound arrives. "Cal delay" is the electronic delay the processor adds; "Arrives" includes it.</p>
-    <div class="tablewrap"><table id="tbl"><thead><tr><th>Speaker</th><th>Channel</th><th>Distance</th><th>Cal delay</th><th>Arrives</th><th>Level</th><th>Off-axis</th></tr></thead><tbody></tbody></table></div>
+    <p class="explain" id="tableNote">Each row is one speaker, sorted by when its sound arrives. "Added delay" is the electronic delay the processor adds (calibration, or the WFS drive delay); "Arrives" includes it.</p>
+    <div class="tablewrap"><table id="tbl"><thead><tr><th>Speaker</th><th>Channel</th><th>Distance</th><th>Added delay</th><th>Arrives</th><th>Level</th><th>Off-axis</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card">
     <h2>Try this</h2>
@@ -246,11 +263,21 @@ const ROOMS={
     layouts:{
       '7.1':{label:'7.1 (screen L C R, side and rear surround arrays, sub)'},
       '5.1':{label:'5.1 (screen L C R, two surround arrays, sub)'},
-      'stereo':{label:'Stereo (screen L R only, sub)'}
+      'stereo':{label:'Stereo (screen L R only, sub)'},
+      'dense':{label:'Dense ring, every speaker addressable (WFS / object style, 1.5 m spacing)'}
     },
     defLayout:'7.1',
     build(k){
       const S=[];
+      if(k==='dense'){
+        let n=0;const ad=(x,y,z,ax,ay)=>{n++;const id='S'+n;mk(S,id,id,x,y,z,ax,ay,'full')};
+        for(let x=-7.5;x<=7.51;x+=1.5)ad(x,0.6,3,x,19);           // behind the screen
+        for(let y=3;y<=27;y+=1.5)ad(8.8,y,4,-8.8,y);              // right wall
+        for(let x=7.5;x>=-7.51;x-=1.5)ad(x,27.8,4,x,0);           // rear wall
+        for(let y=27;y>=3;y-=1.5)ad(-8.8,y,4,8.8,y);              // left wall
+        mk(S,'Sub','LFE',0,0.4,1,0,19,'sub');
+        return S;
+      }
       mk(S,'L','L',-6,0.6,4,0,19,'full');
       if(k!=='stereo')mk(S,'C','C',0,0.6,4,0,19,'full');
       mk(S,'R','R',6,0.6,4,0,19,'full');
@@ -266,7 +293,7 @@ const ROOMS={
       }
       return S;
     },
-    channels:{'7.1':['L','C','R','Lss','Rss','Lrs','Rrs','LFE'],'5.1':['L','C','R','Ls','Rs','LFE'],'stereo':['L','R','LFE']}
+    channels:{'dense':null,'7.1':['L','C','R','Lss','Rss','Lrs','Rrs','LFE'],'5.1':['L','C','R','Ls','Rs','LFE'],'stereo':['L','R','LFE']}
   },
   car:{
     id:'car', x0:-0.75, x1:0.75, y0:0, y1:2.45, ref:{x:0,y:1.4}, slow:500, grid:0.035, snap:0.16, spreadMax:2.5,
@@ -304,7 +331,8 @@ const ROOMS={
 };
 
 /* ---------- State ---------- */
-const S={room:'cinema',layout:'7.1',mode:'pan',az:-20,orbit:false,sound:'voice',heat:'error',calTarget:'ref',align:true,level:true,reverb:true,yaw:0,vol:0.6,L:{x:0,y:19},solo:null};
+const S={room:'cinema',layout:'7.1',mode:'pan',az:-20,orbit:false,sound:'voice',heat:'error',calTarget:'ref',align:true,level:true,reverb:true,yaw:0,vol:0.6,L:{x:0,y:19},solo:null,method:'vbap',binaural:true,cmp:{A:'vbap-cal',B:'wfs',cur:'A',auto:false}};
+let DRV={g:[],d:[]},jumpNext=false;
 let R=ROOMS.cinema, SPK=[], CH=[], chColor={};
 let dirty=true, audioDirty=true;
 
@@ -373,6 +401,34 @@ function chanWeights(){
   if(S.mode==='solo'){const g={};CH.forEach(c=>g[c]=0);if(S.solo!=null&&SPK[S.solo])g[SPK[S.solo].ch]=1;return g}
   return panGains(S.az);
 }
+const SYSTEMS={
+  'vbap-cal':{label:'Channel panning (VBAP), calibrated',method:'vbap',align:true,level:true,bin:true,note:'What most cinemas and premium cars do today. Sharp and correct at the tuned seat. Off-centre, sounds between speakers pull toward the nearest one.'},
+  'vbap-raw':{label:'Channel panning, uncalibrated',method:'vbap',align:false,level:false,bin:true,note:'An untuned system: no delay or level correction. The nearest speaker wins almost everywhere.'},
+  'snap':{label:'Snap to nearest speaker',method:'snap',align:true,level:true,bin:true,note:'Each sound plays from one real speaker, so it is sharp and correct from every seat, but a moving sound hops from speaker to speaker.'},
+  'ambi':{label:'First-order Ambisonics',method:'ambi',align:true,level:true,bin:true,note:'Every speaker plays a share of each sound. Smooth and enveloping, but directions are vague and wide, more so off-centre.'},
+  'wfs':{label:'WFS-style virtual source',method:'wfs',align:false,level:false,bin:true,note:'The speakers re-create the wavefront of a virtual source placed beyond the walls, so its position holds across most seats. With this few speakers you also hear comb-filter colouration (spatial aliasing). Calibration does not apply.'},
+  'stereo':{label:'Plain stereo headphones (no HRTF)',method:'vbap',align:true,level:true,bin:false,note:'Ordinary stereo headphones: the same speaker feeds panned only left and right. Everything sits inside your head, with no front, back or height. The map still shows the in-room prediction.'}
+};
+function wfsOn(){return S.mode==='pan'&&S.method==='wfs'}
+function snapGains(az){const g={};CH.forEach(c=>g[c]=0);let best=null,bd=1e9;Object.entries(CHAZ).forEach(([c,v])=>{const dd=Math.abs(((az-v.az)%360+540)%360-180);if(dd<bd){bd=dd;best=c}});if(best)g[best]=1;if('LFE' in g)g.LFE=0.5;return g}
+function ambiGains(az){const g={};CH.forEach(c=>g[c]=0);let ss=0;Object.entries(CHAZ).forEach(([c,v])=>{const x=Math.max(0,0.5+0.5*Math.cos((az-v.az)*Math.PI/180));g[c]=x;ss+=x*x});ss=Math.sqrt(ss)||1;Object.keys(CHAZ).forEach(c=>g[c]/=ss);if('LFE' in g)g.LFE=0.5;return g}
+function drives(){
+  const n=SPK.length,g=new Array(n).fill(0),d=new Array(n).fill(0);
+  if(S.mode==='solo'){if(S.solo!=null&&S.solo<n)g[S.solo]=1;return {g,d}}
+  if(S.method==='wfs'){
+    const T0=intendedPoint(panGains(S.az));
+    const push=R.id==='car'?0.25:2,ux=T0.x-R.ref.x,uy=T0.y-R.ref.y,ul=Math.hypot(ux,uy)||1;
+    const Sx=T0.x+push*ux/ul,Sy=T0.y+push*uy/ul; // virtual source just beyond the speakers, behind the intended point
+    let ss=0;
+    SPK.forEach((sp,i)=>{if(sp.band==='sub'){g[i]=0.5;return}const vx=sp.x-Sx,vy=sp.y-Sy,r=Math.max(0.2,Math.hypot(vx,vy));const c=(sp.aim.x*vx+sp.aim.y*vy)/r;if(c<=0)return;g[i]=c/Math.sqrt(r);d[i]=r/C;ss+=g[i]*g[i]});
+    if(ss>0){const k=Math.sqrt(ss);let dm=Infinity;SPK.forEach((sp,i)=>{if(sp.band!=='sub'){g[i]/=k;if(g[i]>0)dm=Math.min(dm,d[i])}});SPK.forEach((sp,i)=>{d[i]=g[i]>0&&sp.band!=='sub'?d[i]-dm:0})}
+    else{const w=snapGains(S.az);SPK.forEach((sp,i)=>{if(sp.band!=='sub')g[i]=w[sp.ch]})}
+    return {g,d};
+  }
+  const w=S.method==='snap'?snapGains(S.az):S.method==='ambi'?ambiGains(S.az):panGains(S.az);
+  SPK.forEach((sp,i)=>g[i]=w[sp.ch]||0);
+  return {g,d};
+}
 function spkMask(i){return S.mode==='solo'?(i===S.solo?1:0):1}
 function intendedPoint(w){
   if(S.mode==='solo'){const sp=SPK[S.solo];return sp?{x:sp.x,y:sp.y}:null}
@@ -388,9 +444,10 @@ function analyze(p,w,T,full){
   const out=[];let amax=0;
   SPK.forEach((sp,i)=>{
     const rp=resp(sp,P);
-    const cg=S.level?CAL.gain[sp.ch]:1;
-    const a=NORM*w[sp.ch]*cg*rp.g/rp.r*spkMask(i);
-    const cd=S.align?CAL.delay[i]:0;
+    const W=wfsOn();
+    const cg=(S.level&&!W)?CAL.gain[sp.ch]:1;
+    const a=NORM*(DRV.g[i]||0)*cg*rp.g/rp.r;
+    const cd=((S.align&&!W)?CAL.delay[i]:0)+(DRV.d[i]||0);
     const t=rp.r/C+cd;
     out.push({i,sp,rp,a,t,cd});if(sp.band!=='sub'&&a>amax)amax=a;
   });
@@ -489,7 +546,7 @@ function draw(now){
   if(wave){
     const e=(now-wave.t0)/1000/R.slow;let alive=false;
     const maxR=Math.hypot(R.x1-R.x0,R.y1-R.y0);
-    A.out.forEach(o=>{if(!(o.a>amax*0.03))return;const rr=C*(e-(S.align?o.cd:0));if(rr<=0){alive=true;return}if(rr>maxR)return;alive=true;ctx.strokeStyle=chColor[o.sp.ch];ctx.globalAlpha=0.7;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(wx(o.sp.x),wy(o.sp.y),rr*view.s,0,7);ctx.stroke()});
+    A.out.forEach(o=>{if(!(o.a>amax*0.03))return;const rr=C*(e-o.cd);if(rr<=0){alive=true;return}if(rr>maxR)return;alive=true;ctx.strokeStyle=chColor[o.sp.ch];ctx.globalAlpha=0.7;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(wx(o.sp.x),wy(o.sp.y),rr*view.s,0,7);ctx.stroke()});
     ctx.globalAlpha=1;
     // arrival ticks
     const arrived=A.out.filter(o=>o.a>amax*0.03&&e>=o.t);
@@ -500,7 +557,7 @@ function draw(now){
   SPK.forEach((sp,i)=>{
     const x=wx(sp.x),y=wy(sp.y),ang=Math.atan2(sp.aim.y,sp.aim.x);
     const sz=R.id==='car'?9:8;
-    const on=(S.mode==='solo'?i===S.solo:w[sp.ch]>0.001);
+    const on=(DRV.g[i]||0)>0.001;
     ctx.save();ctx.translate(x,y);ctx.rotate(ang);
     ctx.fillStyle=chColor[sp.ch];ctx.globalAlpha=on?1:0.35;
     ctx.beginPath();
@@ -510,7 +567,7 @@ function draw(now){
     ctx.restore();
     ctx.globalAlpha=on?1:0.5;ctx.fillStyle=T['--ink'];ctx.font='600 10.5px Inter, system-ui, sans-serif';
     const lx=x-sp.aim.x*16,ly=y-sp.aim.y*16+4;
-    if(R.id==='car'||(sp.band!=='sub'&&(!/\d/.test(sp.id)||sp.id.endsWith('1'))))ctx.fillText(R.id==='car'?sp.label:sp.ch,lx,ly);
+    if(R.id==='car'||(sp.band!=='sub'&&S.layout!=='dense'&&(!/\d/.test(sp.id)||sp.id.endsWith('1'))))ctx.fillText(R.id==='car'?sp.label:sp.ch,lx,ly);
     ctx.globalAlpha=1;
   });
   // intended & perceived
@@ -551,7 +608,8 @@ function updateReadout(A,w){
   $('#readout').innerHTML=cells.map(c=>`<div class="stat"><div class="k">${c.k}</div><div class="v">${c.v}</div><div class="s">${c.s}</div></div>`).join('');
   // table
   const amax=Math.max(1e-9,...A.out.map(o=>o.a));
-  const rows=[...A.out].sort((a,b)=>a.t-b.t);
+  let rows=[...A.out].sort((a,b)=>a.t-b.t);
+  if(rows.length>20)rows=rows.filter(o=>o.a>amax*0.03);
   const firstT=rows.find(o=>o.a>amax*0.03)?.t;
   $('#tbl tbody').innerHTML=rows.map(o=>{
     const act=o.a>amax*0.03;const lv=act?dbs(o.a/amax).toFixed(1)+' dB':'off';
@@ -563,7 +621,8 @@ function updateReadout(A,w){
   if(S.heat!=='none')lg+=`<span class="sc">${sc.label}: ${sc.lo}<span class="bar" style="background:${grad}"></span>${sc.hi}</span>`;
   lg+=`<span class="key"><span class="dot" style="background:${T['--listener']}"></span>You (arrow: predicted image)</span>`;
   if(S.mode==='pan')lg+=`<span class="key">★ where the mix places the source</span>`;
-  lg+=CH.map(c=>`<span class="key"><span class="dot" style="background:${chColor[c]}"></span>${c}</span>`).join('');
+  if(CH.length<=10)lg+=CH.map(c=>`<span class="key"><span class="dot" style="background:${chColor[c]}"></span>${c}</span>`).join('');
+  else lg+=`<span class="key">${CH.length-1} individually driven speakers + sub</span>`;
   $('#legend').innerHTML=lg;
 }
 
@@ -576,7 +635,7 @@ function ensureAudio(){
   master.connect(comp);comp.connect(AC.destination);
   dryBus=AC.createGain();dryBus.connect(master);
   revSend=AC.createGain();conv=AC.createConvolver();revGain=AC.createGain();revSend.connect(conv);conv.connect(revGain);revGain.connect(master);
-  srcGain=AC.createGain();
+  srcGain=AC.createGain();srcGain.connect(revSend);
   buildGraph();
 }
 function makeIR(){
@@ -589,7 +648,7 @@ function buildGraph(){
   Object.values(chanNodes).forEach(n=>n.disconnect());spkNodes.forEach(n=>{n.out.disconnect();n.pan.disconnect()});
   chanNodes={};spkNodes=[];
   conv.buffer=makeIR();
-  CH.forEach(c=>{const g=AC.createGain();g.gain.value=0;srcGain.connect(g);g.connect(revSend);chanNodes[c]=g});
+  CH.forEach(c=>{const g=AC.createGain();g.gain.value=0;srcGain.connect(g);chanNodes[c]=g});
   SPK.forEach(sp=>{
     let head=chanNodes[sp.ch],first=null;
     const chain=[];
@@ -609,23 +668,26 @@ function buildGraph(){
 }
 function applyAudio(){
   if(!AC)return;
-  const t=AC.currentTime,tc=0.04;
-  const w=chanWeights();
-  CH.forEach(c=>chanNodes[c]&&chanNodes[c].gain.setTargetAtTime(w[c],t,tc));
+  const now=AC.currentTime;let t=now,tc=0.04;
+  if(jumpNext){ // A/B switch: quick dip so delay jumps don't glide in pitch
+    master.gain.cancelScheduledValues(now);master.gain.setTargetAtTime(0,now,0.008);t=now+0.05;tc=0.003;jumpNext=false;
+  }
+  CH.forEach(c=>chanNodes[c]&&chanNodes[c].gain.setTargetAtTime(1,t,tc));
   const P=P3(S.L);const yaw=S.yaw*Math.PI/180,cy=Math.cos(yaw),sy=Math.sin(yaw);
   SPK.forEach((sp,i)=>{
     const n=spkNodes[i];if(!n)return;
     const rp=resp(sp,P);
-    const cg=S.level?CAL.gain[sp.ch]:1;
-    n.gain.gain.setTargetAtTime(NORM*cg*rp.g/rp.r*spkMask(i),t,tc);
-    n.delay.delayTime.setTargetAtTime(clamp(rp.r/C+(S.align?CAL.delay[i]:0),0,0.29),t,tc);
+    const W=wfsOn();const cg=(S.level&&!W)?CAL.gain[sp.ch]:1;
+    n.gain.gain.setTargetAtTime(NORM*(DRV.g[i]||0)*cg*rp.g/rp.r,t,tc);
+    n.delay.delayTime.setTargetAtTime(clamp(rp.r/C+((S.align&&!W)?CAL.delay[i]:0)+(DRV.d[i]||0),0,0.29),t,tc);
+    const pm=S.binaural?'HRTF':'equalpower';if(n.pan.panningModel!==pm)n.pan.panningModel=pm;
     n.shelf.gain.setTargetAtTime(rp.shelf,t,tc);
     const rx=sp.x-P.x,rz=sp.y-P.y,ry=sp.z-P.z;
     const hx=rx*cy - (-rz)*sy, hf=rx*sy + (-rz)*cy; // head frame: right, forward
     if(n.pan.positionX){n.pan.positionX.setTargetAtTime(hx,t,tc);n.pan.positionY.setTargetAtTime(ry,t,tc);n.pan.positionZ.setTargetAtTime(-hf,t,tc)}
     else n.pan.setPosition(hx,ry,-hf);
   });
-  master.gain.setTargetAtTime(S.vol,t,tc);
+  master.gain.setTargetAtTime(S.vol,t,t>now?0.01:tc);
   revGain.gain.setTargetAtTime(S.reverb?R.wet:0,t,tc);
   audioDirty=false;
 }
@@ -693,7 +755,7 @@ function setRoom(id,keepSeat){
   resize();
 }
 function setLayout(k){
-  S.layout=k;SPK=R.build(k);CH=R.channels[k];
+  S.layout=k;SPK=R.build(k);CH=R.channels[k]||[...new Set(SPK.map(x=>x.ch))];
   chColor={};CH.forEach((c,i)=>chColor[c]=T['c'+(c==='LFE'?7:i%7)]);
   chanAz();
   const ref=calibrate(R.ref);NORM=0.32/Math.sqrt(ref.target);
@@ -709,10 +771,24 @@ function syncUI(){
   $('#yaw').value=S.yaw;$('#yawV').textContent=(S.yaw>0?'right ':S.yaw<0?'left ':'')+Math.abs(S.yaw)+'°';
   $('#vol').value=S.vol;$('#volV').textContent=Math.round(S.vol*100)+'%';
   $('#modeSeg').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===S.mode));
+  $('#sysA').value=S.cmp.A;$('#sysB').value=S.cmp.B;$('#abAuto').checked=S.cmp.auto;
+  $('#abSeg').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===S.cmp.cur));
+  $('#sysNote').innerHTML='<b>Hearing '+S.cmp.cur+':</b> '+SYSTEMS[S.cmp[S.cmp.cur]].note;
+  $('#align').disabled=$('#level').disabled=wfsOn();
   $('#panCtl').hidden=S.mode!=='pan';$('#soloCtl').hidden=S.mode!=='solo';
 }
 function azText(a){a=Math.round(a);if(a===0)return 'front';if(Math.abs(a)===180)return 'behind';return Math.abs(a)+'° '+(a<0?'left':'right')}
 
+/* A/B */
+const sysOpts=Object.entries(SYSTEMS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+$('#sysA').innerHTML=sysOpts;$('#sysB').innerHTML=sysOpts;
+let lastFlip=0;
+function applySystem(id){const s=SYSTEMS[id];S.method=s.method;S.align=s.align;S.level=s.level;S.binaural=s.bin;if(S.mode!=='pan'){S.mode='pan'}if(S.heat==='level')S.heat='error';jumpNext=true;syncUI();dirty=audioDirty=true;lastFlip=performance.now()}
+function hear(which){S.cmp.cur=which;applySystem(S.cmp[which])}
+$('#abSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(b)hear(b.dataset.v)});
+$('#sysA').addEventListener('change',e=>{S.cmp.A=e.target.value;hear('A')});
+$('#sysB').addEventListener('change',e=>{S.cmp.B=e.target.value;hear('B')});
+$('#abAuto').addEventListener('change',e=>{S.cmp.auto=e.target.checked;lastFlip=performance.now()});
 /* events */
 $('#play').addEventListener('click',togglePlay);
 $('#fire').addEventListener('click',fire);
@@ -729,7 +805,7 @@ $('#calTarget').addEventListener('change',e=>{S.calTarget=e.target.value;recal()
 ['align','level','reverb'].forEach(k=>$('#'+k).addEventListener('change',e=>{S[k]=e.target.checked;dirty=audioDirty=true}));
 $('#yaw').addEventListener('input',e=>{S.yaw=+e.target.value;syncUI();dirty=audioDirty=true});
 $('#vol').addEventListener('input',e=>{S.vol=+e.target.value;$('#volV').textContent=Math.round(S.vol*100)+'%';audioDirty=true});
-document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;if(e.key==='a'||e.key==='A'){S.align=!S.align;syncUI();dirty=audioDirty=true}});
+document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;if(e.key==='a'||e.key==='A'){S.align=!S.align;syncUI();dirty=audioDirty=true}if(e.key==='b'||e.key==='B'){hear(S.cmp.cur==='A'?'B':'A')}});
 
 let drag=null;
 function ptr(e){const r=cv.getBoundingClientRect();return toWorld(e.clientX-r.left,e.clientY-r.top)}
@@ -755,7 +831,11 @@ const EXPS={
     {t:'Move to the front row, far left',d:'You are 6 m from the left screen speaker and over 14 m from the right one. Left arrives about 25 ms earlier and much louder, so a voice panned between L and C sticks to L. Watch the blue arrow drift from the star.',s:{L:{x:-7,y:7},mode:'pan',az:-9,orbit:false,sound:'voice',heat:'error'}},
     {t:'Stereo vs 5.1 for off-centre seats',d:'Same seat, stereo layout, voice dead centre. With no centre speaker the "phantom" centre collapses into the nearer side. Switch the layout back to 5.1 and the real centre speaker holds it.',s:{layout:'stereo',L:{x:-6,y:15},mode:'pan',az:0,sound:'voice',heat:'error'}},
     {t:'See why alignment fits one seat',d:'Press Fire wavefronts. Alignment delays the nearer speakers so their rings meet at the dashed calibration ring. At your seat they still arrive spread out. Press A to toggle alignment and fire again.',s:{layout:'7.1',L:{x:-6,y:9},mode:'pan',az:0,orbit:false,align:true,calTarget:'ref',heat:'spread'},fire:true},
-    {t:'Fly a sound around the back row',d:'Pink noise orbits the room. Surround arrays put many speakers on each wall so no single one dominates, which keeps the side image smooth even here.',s:{layout:'7.1',L:{x:-6,y:25},mode:'pan',orbit:true,sound:'pink',heat:'error'}}
+    {t:'Fly a sound around the back row',d:'Pink noise orbits the room. Surround arrays put many speakers on each wall so no single one dominates, which keeps the side image smooth even here.',s:{layout:'7.1',L:{x:-6,y:25},mode:'pan',orbit:true,sound:'pink',heat:'error'}},
+    {t:'Many speakers: panning vs WFS',ab:['vbap-cal','wfs'],d:'Dense ring, front row far left, voice at the screen just left of centre. Both keep the voice near the star: with a speaker every 1.5 m, the nearest one already points the right way. That is the idea behind Atmos-style addressable speakers. Listen to the character instead: B (WFS) drives many speakers with delays, so it sounds more spacious but coloured and smeared.',s:{layout:'dense',L:{x:-7,y:7},mode:'pan',az:-9,orbit:false,sound:'voice',calTarget:'ref',heat:'error'}},
+    {t:'Few speakers: panning vs WFS',ab:['vbap-cal','wfs'],d:'Same seat and voice on the 7.1 layout. Both land about 20° off, pulled to the left screen speaker. With sparse speakers no algorithm fixes the nearest-speaker problem; more speakers do.',s:{layout:'7.1',L:{x:-7,y:7},mode:'pan',az:-9,orbit:false,sound:'voice',calTarget:'ref',heat:'error'}},
+    {t:'Sharp vs smooth: snap vs Ambisonics',ab:['snap','ambi'],d:'Side seat, source flying around. A is crisp but hops between speakers. B glides smoothly but sounds wide and vague. Turn on Switch every 4 s.',s:{layout:'7.1',L:{x:6,y:15},mode:'pan',orbit:true,sound:'pink',calTarget:'ref',heat:'error'}},
+    {t:'Why binaural matters',ab:['vbap-cal','stereo'],d:'Reference seat, source in front-left. A renders each speaker from its real direction. B is what ordinary headphones give: the sound sits inside your head on a line between your ears.',s:{layout:'7.1',L:{x:0,y:19},mode:'pan',az:-30,orbit:false,sound:'pluck',calTarget:'ref',heat:'error'}}
   ],
   car:[
     {t:'Driver seat, no tuning',d:'Four door speakers, voice panned dead centre, calibration off. The left door is about 0.6 m closer than the right, so it arrives ~1.8 ms earlier and the voice falls into the left door.',s:{layout:'basic',L:{x:-0.37,y:0.95},mode:'pan',az:0,sound:'voice',align:false,level:false,calTarget:'fl',heat:'error'}},
@@ -763,17 +843,22 @@ const EXPS={
     {t:'Passenger in a driver-tuned car',d:'Keep the driver tuning and move to the front-right seat. The delay that helped the driver now makes the right side even earlier for you: the image snaps hard right.',s:{layout:'basic',L:{x:0.37,y:0.95},mode:'pan',az:0,sound:'voice',align:true,level:true,calTarget:'fl',heat:'error'}},
     {t:'Compromise: tune for the cabin centre',d:'Calibrating for the middle of the cabin sounds fair, but the doors are symmetric about that point, so almost no delay is added and both front seats sound untuned again. This is why cars offer a Driver / All seats switch, and why premium systems add a centre speaker.',s:{layout:'basic',L:{x:-0.37,y:0.95},mode:'pan',az:0,sound:'voice',align:true,level:true,calTarget:'ctr',heat:'error'}},
     {t:'A real centre speaker',d:'Premium layout with a dash centre speaker and no tuning at all. A voice sent only to the centre channel stays centred for every seat, because there is nothing to fuse.',s:{layout:'premium',L:{x:0.37,y:0.95},mode:'pan',az:0,sound:'voice',align:false,level:false,calTarget:'fl',heat:'error'}},
-    {t:'Hear a low door woofer',d:'Solo the front-left door woofer. It sits at knee height and points across the cabin, so it sounds low and dull. That is why cars add tweeters up on the A-pillars.',s:{layout:'premium',L:{x:-0.37,y:0.95},mode:'solo',soloId:'FL woofer',sound:'pink',heat:'level'}}
+    {t:'Hear a low door woofer',d:'Solo the front-left door woofer. It sits at knee height and points across the cabin, so it sounds low and dull. That is why cars add tweeters up on the A-pillars.',s:{layout:'premium',L:{x:-0.37,y:0.95},mode:'solo',soloId:'FL woofer',sound:'pink',heat:'level'}},
+    {t:'What tuning buys the driver',ab:['vbap-cal','vbap-raw'],d:'Driver seat, four door speakers, voice centred. A is tuned for the driver: the voice sits in front of you. B is untuned: it falls into the left door.',s:{layout:'basic',L:{x:-0.37,y:0.95},mode:'pan',az:0,orbit:false,sound:'voice',calTarget:'fl',heat:'error'}},
+    {t:'WFS needs many speakers',ab:['vbap-cal','wfs'],d:'The same idea as cinema WFS, with only the car speakers. Seven speakers cannot rebuild a wavefront, so B mostly adds colouration and smearing. This is why cars use per-seat tuning and headrest speakers instead.',s:{layout:'premium',L:{x:-0.37,y:0.95},mode:'pan',az:-20,orbit:false,sound:'voice',calTarget:'fl',heat:'error'}},
+    {t:'Why binaural matters',ab:['vbap-cal','stereo'],d:'Driver seat, source front-left. A renders each speaker from its real direction, including the low door woofer. B is ordinary headphones: everything inside your head.',s:{layout:'premium',L:{x:-0.37,y:0.95},mode:'pan',az:-30,orbit:false,sound:'pluck',calTarget:'fl',heat:'error'}}
   ]
 };
 function renderExps(){
-  $('#exps').innerHTML=EXPS[R.id].map((x,i)=>`<article><h3>${x.t}</h3><p>${x.d}</p><button class="btn" type="button" data-i="${i}">Set this up</button></article>`).join('');
+  let lastAb=null;
+  $('#exps').innerHTML=EXPS[R.id].map((x,i)=>{const hd=(!!x.ab!==lastAb)?`<h4>${x.ab?'Compare with A/B':'Explore'}</h4>`:'';lastAb=!!x.ab;return hd+`<article><h3>${x.t}</h3><p>${x.d}</p><button class="btn" type="button" data-i="${i}">Set this up</button></article>`}).join('');
 }
 $('#exps').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const x=EXPS[R.id][+b.dataset.i];const s=x.s;
   if(s.layout&&s.layout!==S.layout)setLayout(s.layout);
+  S.method='vbap';S.binaural=true;S.cmp.auto=false;
   Object.entries(s).forEach(([k,v])=>{if(k==='layout'||k==='soloId')return;S[k]=(k==='L')?{...v}:v});
   if(s.soloId)S.solo=SPK.findIndex(sp=>sp.id===s.soloId);
-  recal();syncUI();if(playing)startSource();dirty=audioDirty=true;
+  recal();if(x.ab){S.cmp.A=x.ab[0];S.cmp.B=x.ab[1];hear('A')}syncUI();if(playing)startSource();dirty=audioDirty=true;DRV=drives();
   if(x.fire)setTimeout(fire,150);
   if(!playing)$('#play').animate?.([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:500});
   window.scrollTo({top:0,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
@@ -784,6 +869,8 @@ let lastT=performance.now(),lastAudio=0;
 function loop(now){
   const dt=(now-lastT)/1000;lastT=now;
   if(S.orbit&&S.mode==='pan'){S.az=((S.az+40*dt+180)%360+360)%360-180;$('#az').value=Math.round(S.az);$('#azV').textContent=azText(S.az);dirty=true;audioDirty=true}
+  if(S.cmp.auto&&now-lastFlip>4000)hear(S.cmp.cur==='A'?'B':'A');
+  if(dirty||audioDirty)DRV=drives();
   if(dirty||wave){
     const w=chanWeights();
     if(dirty)computeHeat(w,intendedPoint(w));
@@ -795,7 +882,7 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 readTokens();
-setRoom('cinema');renderExps();syncUI();
+setRoom('cinema');renderExps();syncUI();DRV=drives();
 $('#roomSeg').addEventListener('click',()=>{renderExps()});
 window.addEventListener('resize',resize);
 const mq=matchMedia('(prefers-color-scheme: dark)');
